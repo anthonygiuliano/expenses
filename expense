@@ -1,51 +1,68 @@
 #! /usr/bin/env ruby
 require 'pg'
 
-SEPARATOR = ' | '
-CONNECTION = PG.connect(dbname: "expenses")
+class CLI
+  attr_reader :command, :arguments, :expense_data
 
-def display_help
-  puts <<~HELP
-    An expense recording system
+  def initialize
+    @command = ARGV[0]
+    @arguments = ARGV[1..-1]
+    @expense_data = ExpenseData.new
+  end
 
-    Commands:
+  def run
+    case command
+    when "list"
+      expense_data.list_expenses
+    when "add"
+      amount = arguments[0]
+      memo = arguments[1]
+      expense_data.add_expense(amount, memo)
+    else
+      display_help
+    end
+  end
+  def display_help
+    puts <<~HELP
+      An expense recording system
 
-    add AMOUNT MEMO [DATE] - record a new expense
-    clear - delete all expenses
-    list - list all expenses
-    delete NUMBER - remove expense with id NUMBER
-    search QUERY - list expenses with a matching memo field
-  HELP
-end
+      Commands:
 
-def list_expenses
-  result = CONNECTION.exec("SELECT * FROM expenses ORDER BY created_on;")
-
-  result.each do |tuple|
-    columns = [ tuple['id'].rjust(3),
-                tuple['created_on'].rjust(10),
-                tuple['amount'].rjust(12),
-                tuple['memo'] ]
-
-    puts columns.join(SEPARATOR)
+      add AMOUNT MEMO [DATE] - record a new expense
+      clear - delete all expenses
+      list - list all expenses
+      delete NUMBER - remove expense with id NUMBER
+      search QUERY - list expenses with a matching memo field
+    HELP
   end
 end
 
-def add_expense(amount, memo)
-  date = Date.today 
-  sql = "INSERT INTO expenses (amount, memo, created_on) VALUES ($1, $2, $3)"
-  CONNECTION.exec_params(sql, [amount, memo, date])
+class ExpenseData
+  SEPARATOR = ' | '
+  CONNECTION = PG.connect(dbname: "expenses")
+
+  def list_expenses
+    result = CONNECTION.exec("SELECT * FROM expenses ORDER BY created_on;")
+
+    result.each do |tuple|
+      columns = [ tuple['id'].rjust(3),
+                  tuple['created_on'].rjust(10),
+                  tuple['amount'].rjust(12),
+                  tuple['memo'] ]
+
+      puts columns.join(SEPARATOR)
+    end
+  end
+
+  def add_expense(amount, memo)
+    unless amount && memo
+      puts "You must provide an amount and memo."
+      return
+    end
+    sql = "INSERT INTO expenses (amount, memo) VALUES ($1, $2)"
+    CONNECTION.exec_params(sql, [amount, memo])
+  end
 end
 
-command = ARGV.first
-case command
-when "list"
-  list_expenses
-when "add"
-  amount = ARGV[1]
-  memo = ARGV[2]
-  abort "You must provide an amount and memo." unless amount && memo
-  add_expense(amount, memo)
-else
-  display_help
-end
+cli = CLI.new
+cli.run
