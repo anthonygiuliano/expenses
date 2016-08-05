@@ -2,6 +2,7 @@
 require 'pg'
 
 SEPARATOR = ' | '
+CONNECTION = PG.connect(dbname: "expenses")
 
 def display_help
   puts <<~HELP
@@ -18,9 +19,7 @@ def display_help
 end
 
 def list_expenses
-  connection = PG.connect(dbname: "expenses")
-
-  result = connection.exec("SELECT * FROM expenses ORDER BY created_on;")
+  result = CONNECTION.exec("SELECT * FROM expenses ORDER BY created_on;")
 
   result.each do |tuple|
     columns = [ tuple['id'].rjust(3),
@@ -32,10 +31,21 @@ def list_expenses
   end
 end
 
+def add_expense(amount, memo)
+  date = Date.today 
+  sql = "INSERT INTO expenses (amount, memo, created_on) VALUES ($1, $2, $3)"
+  CONNECTION.exec_params(sql, [amount, memo, date])
+end
+
 command = ARGV.first
 case command
 when "list"
   list_expenses
+when "add"
+  amount = ARGV[1]
+  memo = ARGV[2]
+  abort "You must provide an amount and memo." unless amount && memo
+  add_expense(amount, memo)
 else
   display_help
 end
