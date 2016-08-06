@@ -11,6 +11,7 @@ class ExpenseData
 
   def list_expenses
     result = connection.exec("SELECT * FROM expenses ORDER BY created_on;")
+    print_count(result)
     print_expenses(result)
     print_total(result)
   end
@@ -33,6 +34,7 @@ class ExpenseData
 
     sql = "SELECT * FROM expenses WHERE memo ILIKE $1;"
     result = connection.exec_params(sql, ["%#{query}%"])
+    print_count(result)
     print_expenses(result)
     print_total(result)
   end
@@ -81,9 +83,19 @@ class ExpenseData
     end
 
     def print_total(result)
-      total = result.field_values('amount').map(&:to_f).inject(&:+)
-      puts '-' * 50
-      puts "Total #{('%.2f' % total).rjust(25)}"
+      if result.ntuples > 0
+        total = result.field_values('amount').map(&:to_f).inject(&:+)
+        puts '-' * 50
+        puts "Total #{('%.2f' % total).rjust(25)}"
+      end
+    end
+
+    def print_count(result)
+      if result.ntuples == 0
+        puts "There are no expenses."
+      else
+        puts "There are #{result.ntuples} expenses."
+      end
     end
 end
 
