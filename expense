@@ -2,26 +2,30 @@
 require 'pg'
 
 class CLI
-  attr_reader :command, :arguments, :expense_data
+  attr_reader :command, :arguments, :application
 
   def initialize
     @command = ARGV[0]
     @arguments = ARGV[1..-1]
-    @expense_data = ExpenseData.new
+    @application = ExpenseData.new
   end
 
   def run
     case command
     when "list"
-      expense_data.list_expenses
+      application.list_expenses
     when "add"
       amount = arguments[0]
       memo = arguments[1]
-      expense_data.add_expense(amount, memo)
+      application.add_expense(amount, memo)
+    when "search"
+      query = arguments[0]
+      application.search_expenses(query)
     else
       display_help
     end
   end
+
   def display_help
     puts <<~HELP
       An expense recording system
@@ -38,29 +42,47 @@ class CLI
 end
 
 class ExpenseData
-  SEPARATOR = ' | '
-  CONNECTION = PG.connect(dbname: "expenses")
+  attr_reader :connection
+
+  def initialize
+    @connection = PG.connect(dbname: "expenses")
+  end
 
   def list_expenses
-    result = CONNECTION.exec("SELECT * FROM expenses ORDER BY created_on;")
+    result = connection.exec("SELECT * FROM expenses ORDER BY created_on;")
+    print_expenses(result)
+  end
 
+  def add_expense(amount, memo)
+    unless amount && memo
+      puts "You must provide an amount and a memo."
+      return
+    end
+    sql = "INSERT INTO expenses (amount, memo) VALUES ($1, $2)"
+    connection.exec_params(sql, [amount, memo])
+  end
+
+  def search_expenses(query)
+    unless query
+      puts "You must provide a search query."
+      return
+    end
+    sql = "SELECT * FROM expenses WHERE memo ILIKE $1;"
+    result = connection.exec_params(sql, ["%#{query}%"])
+    print_expenses(result)
+  end
+
+  private
+
+  def print_expenses(result)
     result.each do |tuple|
       columns = [ tuple['id'].rjust(3),
                   tuple['created_on'].rjust(10),
                   tuple['amount'].rjust(12),
                   tuple['memo'] ]
 
-      puts columns.join(SEPARATOR)
+      puts columns.join(' | ')
     end
-  end
-
-  def add_expense(amount, memo)
-    unless amount && memo
-      puts "You must provide an amount and memo."
-      return
-    end
-    sql = "INSERT INTO expenses (amount, memo) VALUES ($1, $2)"
-    CONNECTION.exec_params(sql, [amount, memo])
   end
 end
 
