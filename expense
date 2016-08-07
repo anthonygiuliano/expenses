@@ -7,6 +7,7 @@ class ExpenseData
 
   def initialize
     @connection = PG.connect(dbname: "expenses")
+    setup_schema
   end
 
   def list_expenses
@@ -97,6 +98,26 @@ class ExpenseData
         puts "There are #{result.ntuples} expenses."
       end
     end
+
+    def setup_schema
+      result = connection.exec <<~SQL
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'expenses';
+      SQL
+
+      if result.field_values('count').first.to_i == 0
+        connection.exec <<~SQL
+          CREATE TABLE expenses (
+            id serial PRIMARY KEY,
+            amount numeric (6,2) NOT NULL,
+            memo varchar NOT NULL,
+            created_on date NOT NULL DEFAULT CURRENT_DATE,
+            CHECK (amount > 0)
+          );
+       SQL
+      end
+    end
 end
 
 class CLI
@@ -141,75 +162,6 @@ class CLI
       delete NUMBER - remove expense with id NUMBER
       search QUERY - list expenses with a matching memo field
     HELP
-  end
-end
-
-class ExpenseData
-  attr_reader :connection
-
-  def initialize
-    @connection = PG.connect(dbname: "expenses")
-  end
-
-  def list_expenses
-    result = connection.exec("SELECT * FROM expenses ORDER BY created_on;")
-    print_count(result)
-    print_expenses(result)
-    print_total(result)
-  end
-
-  def add_expense(amount, memo)
-    unless amount && memo
-      puts "You must provide an amount and a memo."
-      return
-    end
-
-    sql = "INSERT INTO expenses (amount, memo) VALUES ($1, $2)"
-    connection.exec_params(sql, [amount, memo])
-  end
-
-  def search_expenses(query)
-    unless query
-      puts "You must provide a search query."
-      return
-    end
-
-    sql = "SELECT * FROM expenses WHERE memo ILIKE $1;"
-    result = connection.exec_params(sql, ["%#{query}%"])
-    print_expenses(result)
-  end
-
-  def delete_expense(id)
-    unless id
-      puts "You must specify the id of the expense you'd like to delete."
-      return
-    end
-
-    sql = "SELECT * FROM expenses where id = $1"
-    result = connection.exec_params(sql, [id])
-
-    if result.ntuples == 1
-      sql = "DELETE FROM expenses WHERE id = $1;"
-      connection.exec_params(sql, [id])
-      puts "The following expense has been deleted:"
-      print_expenses(result)
-    else
-      puts "There is no expense with the id '#{id}'."
-      return
-    end
-  end
-
-  private
-
-  def print_expenses(result)
-    result.each do |tuple|
-      columns = [ tuple['id'].rjust(3),
-                  tuple['created_on'].rjust(10),
-                  tuple['amount'].rjust(12),
-                  tuple['memo'] ]
-
-      puts columns.join(' | ')
-    end
   end
 end
 
